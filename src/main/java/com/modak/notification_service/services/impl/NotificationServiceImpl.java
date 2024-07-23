@@ -25,10 +25,9 @@ public class NotificationServiceImpl implements NotificationService {
     }
 
     @Override
-    public void sendNotification(String type, String addressee, String message) {
+    public void sendNotification(String type, String addressee, String message) {  //I preferred to change the name of the function
         LocalDateTime now = LocalDateTime.now();
         NotificationType notificationType;
-
         try {
             notificationType = NotificationType.valueOf(type.toUpperCase());
         } catch (IllegalArgumentException e) {
@@ -40,14 +39,18 @@ public class NotificationServiceImpl implements NotificationService {
             throw new RateLimitExceededException("Rate limit exceeded for " + type + " notifications", timeRemaining);
         }
 
+        gateway.send(addressee, message);
+        buildAndSaveNotification(addressee, message, notificationType, now);
+
+    }
+
+    private void buildAndSaveNotification(String addressee, String message, NotificationType notificationType, LocalDateTime now) {
         Notification notification = new Notification();
         notification.setAddressee(addressee);
         notification.setMessage(message);
         notification.setNotificationType(notificationType);
         notification.setDateTime(now);
         notificationRepository.save(notification);
-
-        gateway.send(addressee, message);
     }
 
     private boolean canSendNotification(String addressee, NotificationType type, LocalDateTime now) {
