@@ -7,12 +7,12 @@ import lombok.Setter;
 @Setter
 public class RateLimitExceededException extends RuntimeException {
     private String type;
-    private long retryAfterMillis;
+    private long timeRemaining;
 
-    public RateLimitExceededException(String type, long retryAfterMillis) {
+    public RateLimitExceededException(String type, long timeRemaining) {
         super("Speed limit exceeded for the notification type: " + type);
         this.type = type;
-        this.retryAfterMillis = retryAfterMillis;
+        this.timeRemaining = timeRemaining;
     }
 
 }
