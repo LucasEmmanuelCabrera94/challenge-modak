@@ -10,17 +10,9 @@ public class RateLimitExceededException extends RuntimeException {
     private long retryAfterMillis;
 
     public RateLimitExceededException(String type, long retryAfterMillis) {
-        super("Límite de velocidad excedido para el tipo de notificación: " + type);
+        super("Speed limit exceeded for the notification type: " + type);
         this.type = type;
         this.retryAfterMillis = retryAfterMillis;
-    }
-
-    public String getType() {
-        return type;
-    }
-
-    public long getRetryAfterMillis() {
-        return retryAfterMillis;
     }
 
 }

@@ -15,4 +15,9 @@ public class ErrorResponse {
         this.description = description;
         this.recommendation = recommendation;
     }
+
+    public ErrorResponse(String message, String description) {
+        this.message = message;
+        this.description = description;
+    }
 }

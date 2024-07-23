@@ -2,12 +2,14 @@ package com.modak.notification_service.services.impl;
 
 import com.modak.notification_service.entities.Notification;
 import com.modak.notification_service.entities.NotificationType;
+import com.modak.notification_service.exceptions.InvalidNotificationTypeException;
 import com.modak.notification_service.exceptions.RateLimitExceededException;
 import com.modak.notification_service.repositories.Gateway;
 import com.modak.notification_service.repositories.NotificationRepository;
 import com.modak.notification_service.services.NotificationService;
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -22,12 +24,20 @@ public class NotificationServiceImpl implements NotificationService {
         this.notificationRepository = notificationRepository;
     }
 
+    @Override
     public void sendNotification(String type, String addressee, String message) {
         LocalDateTime now = LocalDateTime.now();
-        NotificationType notificationType = NotificationType.valueOf(type.toUpperCase()); //TODO: Validar que exista
+        NotificationType notificationType;
+
+        try {
+            notificationType = NotificationType.valueOf(type.toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw new InvalidNotificationTypeException(type);
+        }
 
         if (!canSendNotification(addressee, notificationType, now)) {
-            throw new RateLimitExceededException("Rate limit exceeded for " + type + " notifications", 1); //TODO : cambiar ultimo valor
+            long timeRemaining = calculateTimeRemaining(addressee, notificationType, now);
+            throw new RateLimitExceededException("Rate limit exceeded for " + type + " notifications", timeRemaining);
         }
 
         Notification notification = new Notification();
@@ -37,37 +47,57 @@ public class NotificationServiceImpl implements NotificationService {
         notification.setDateTime(now);
         notificationRepository.save(notification);
 
-        // Lógica para enviar el correo electrónico
+        gateway.send(addressee, message);
     }
 
     private boolean canSendNotification(String addressee, NotificationType type, LocalDateTime now) {
-        LocalDateTime limit = now;
+        List<Notification> recentNotifications = getRecentNotifications(addressee, type, now);
+        int limit = getNotificationLimit(type);
+        return recentNotifications.size() < limit;
+    }
 
-        switch (type) {
-            case STATUS:
-                limit = now.minusMinutes(1);
-                break;
-            case NEWS:
-                limit = now.minusDays(1);
-                break;
-            case MARKETING:
-                limit = now.minusHours(1);
-                break;
-            default:
-                return true;
+    private long calculateTimeRemaining(String addressee, NotificationType type, LocalDateTime now) {
+        List<Notification> recentNotifications = getRecentNotifications(addressee, type, now);
+        int limit = getNotificationLimit(type);
+
+        if (recentNotifications.size() >= limit) {
+            LocalDateTime lastNotificationTime = recentNotifications.get(0).getDateTime();
+            LocalDateTime earliestAllowedTime = getEarliestAllowedTime(type, lastNotificationTime);
+            return Duration.between(now, earliestAllowedTime).toSeconds();
         }
 
-        List<Notification> recentNotifications = notificationRepository.findByAddresseeAndNotificationTypeAndDateTimeAfter(addressee, type, limit);
+        return 0;
+    }
 
-        switch (type) {
-            case STATUS:
-                return recentNotifications.size() < 2;
-            case NEWS:
-                return recentNotifications.size() < 1;
-            case MARKETING:
-                return recentNotifications.size() < 3;
-            default:
-                return true;
-        }
+    private int getNotificationLimit(NotificationType type) {
+        return switch (type) {
+            case STATUS -> 2;
+            case NEWS -> 1;
+            case MARKETING -> 3;
+            default -> Integer.MAX_VALUE;
+        };
+    }
+
+    private LocalDateTime getEarliestAllowedTime(NotificationType type, LocalDateTime lastNotificationTime) {
+        return switch (type) {
+            case STATUS -> lastNotificationTime.plusMinutes(1);
+            case NEWS -> lastNotificationTime.plusDays(1);
+            case MARKETING -> lastNotificationTime.plusHours(1);
+            default -> LocalDateTime.now();
+        };
+    }
+
+    private List<Notification> getRecentNotifications(String addressee, NotificationType type, LocalDateTime now) {
+        LocalDateTime limit = getLimitDateTime(type, now);
+        return notificationRepository.findByAddresseeAndNotificationTypeAndDateTimeAfter(addressee, type, limit);
+    }
+
+    private LocalDateTime getLimitDateTime(NotificationType type, LocalDateTime now) {
+        return switch (type) {
+            case STATUS -> now.minusMinutes(1);
+            case NEWS -> now.minusDays(1);
+            case MARKETING -> now.minusHours(1);
+            default -> now;
+        };
     }
 }
